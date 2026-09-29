@@ -349,7 +349,7 @@ System.out.println(s2 == s3);    // true  (both point to the exact same pooled o
 ```
 
 
-## 10. If the garbage collector does not collect unreferenced objects from the string pool, will memory usage increase and eventually cause a crash?
+## 10. Are unreferenced strings inside the String Constant Pool eligible for Garbage Collection?
 
 **Yes, but with a major caveat:** Modern JVM implementations manage the String Constant Pool using a specialized internal cache (the `StringTable`), and unreferenced pooled strings **are** eligible for garbage collection, just like regular objects in the heap. 
 
@@ -366,6 +366,51 @@ System.out.println(s2 == s3);    // true  (both point to the exact same pooled o
 * **How Cleanup Works:** If a string is **interned** or created via a literal, but no variables reference it anymore, the **Garbage Collector** can safely sweep it away to reclaim memory. It will delete the string provided it is no longer referenced anywhere in the application or by the **JVM's internal tables**.
 
 
+## 11. How does uncontrolled string interning bypass standard garbage collection and trigger an OutOfMemoryError? (The Crash Scenario)
+
+If an application continuously interns unique, dynamically generated strings that are never reused (e.g., calling `someRandomVariable.intern()` inside a loop for millions of unique user inputs or random UUIDs), it creates a severe memory leak:
+
+- **Memory Bloat:** The internal `StringTable` keeps strong references to all interned strings to ensure they can be found by future lookups. 
+- **The Crash:** If unique strings are constantly added and never removed, the memory allocated for the pool will grow uncontrollably. Eventually, the JVM will run out of available heap space, resulting in a **`java.lang.OutOfMemoryError: Java heap space`**, which will crash the application.
+
+
+**Code Example: Crashing the JVM with Uncontrolled Interning**
+
+The following example demonstrates how calling `.intern()` on dynamic data (like random text strings or UUIDs) inside a continuous loop bypasses standard garbage collection by locking the strings into the internal `StringTable`, ultimately crashing the application.
+
+```java
+import java.util.UUID;
+
+public class StringPoolCrashExample {
+    public static void main(String[] args) {
+        System.out.println("Application started. Simulating high-volume dynamic string interning...");
+        
+        long counter = 0;
+        try {
+            while (true) {
+                // Generate a highly dynamic, unique string (e.g., a random UUID)
+                String dynamicString = UUID.randomUUID().toString();
+                
+                // CRITICAL ERROR: Forcing a unique, runtime string into the pool
+                // The JVM's internal StringTable creates a strong reference to it
+                dynamicString.intern();
+                
+                counter++;
+                if (counter % 100_000 == 0) {
+                    System.out.println("Interned " + counter + " unique strings successfully...");
+                }
+            }
+        } catch (OutOfMemoryError oom) {
+            // The JVM crashes here because the String Constant Pool exhausted the available Heap Space
+            System.err.println("\nCRASH DETECTED!");
+            System.err.println("Exception in thread \"main\" java.lang.OutOfMemoryError: Java heap space");
+            System.err.println("Total strings interned before crash: " + counter);
+        }
+    }
+}
+```
+
+Always avoid calling `.intern()` on arbitrary, highly dynamic runtime data (like user inputs, timestamps, or unique IDs) unless you are certain the set of possible strings is small and bounded. Uncontrolled interning will bloat memory and can crash your application.
 
 
 
