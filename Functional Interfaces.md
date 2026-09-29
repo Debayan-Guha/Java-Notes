@@ -268,7 +268,218 @@ BillDetailsResponse response = OperationExecutor.dbGetWithMetrics(
 );
 ```
 
+---
 
+
+# `BiConsumer<T, U>`
+
+```java
+package java.util.function;
+
+import java.util.Objects;
+
+@FunctionalInterface
+public interface BiConsumer<T, U> {
+
+    void accept(T t, U u);
+
+    default BiConsumer<T, U> andThen(BiConsumer<? super T, ? super U> after) {
+        Objects.requireNonNull(after);
+        return (l, r) -> { accept(l, r); after.accept(l, r); };
+    }
+}
+```
+
+---
+
+- **Methods:** It contains exactly one abstract method: `void accept(T t, U u)`. It also contains a default method `andThen(BiConsumer<? super T, ? super U> after)` used for chaining multiple bi-consumer operations sequentially.
+- **Input Parameters:** **Two** (Accepts two arguments: the first of generic type `T` and the second of generic type `U`).
+- **Output / Return Type:** **`void`** (Processes both pieces of data but returns no result).
+- **Meaning:** It represents an operation that takes two distinct input values, consumes them together, and performs a combined action or side-effect (like logging a key-value pair, processing coordinates, or updating a map tracking context) without returning any data back.
+- **When to Use:** Use it when you need to process pairs of associated data, map elements, or contextualized events where no return value is expected.
+  - *Map Iteration (`Map.forEach`):* Processing both the keys and values of a `Map` simultaneously inside a loop.
+  - *Contextual Tracking:* Consuming a transactional payload alongside its execution context metadata (like a request ID or timestamp) to print comprehensive audit logs.
+  - *Key-Value Configurations:* Passing configuration settings where a property name and its value must be processed or bound into a service together.
+  - *Error Reporting:* Handling a dynamic business object alongside a thrown exception to build complex error alerts.
+  - *Enterprise Architecture (Flexible Multi-Context Wrappers):* Using execution wrappers where you need to pass an operation's response data alongside processing telemetry (such as execution duration or method names) to specialized reporting frameworks.
+
+**How to Use BiConsumer**
+
+1. **Traditional Anonymous Inner Class (Legacy Approach)**
+Before Java 8, you had to implement the interface using an anonymous class:
+```java
+import java.util.function.BiConsumer;
+
+BiConsumer<String, Integer> logMapEntry = new BiConsumer<String, Integer>() {
+    @Override
+    public void accept(String key, Integer value) {
+        System.out.println("Processing -> Key: " + key + " | Value: " + value);
+    }
+};
+
+logMapEntry.accept("billId_101", 500);
+```
+
+2. **Modern Lambda Expression (Java 8+ Approach)**
+Because BiConsumer is a functional interface, you can replace the bulky anonymous class with a clean, concise lambda expression:
+```java
+import java.util.function.BiConsumer;
+
+BiConsumer<String, Integer> logMapEntry = (key, value) -> 
+    System.out.println("Processing -> Key: " + key + " | Value: " + value);
+
+logMapEntry.accept("billId_101", 500);
+```
+
+3. **Inline Direct Execution**
+You can pass the lambda expression directly into map operations like `Map.forEach()` to process keys and values inline:
+```java
+import java.util.HashMap;
+import java.util.Map;
+
+Map<String, String> statusMap = new HashMap<>();
+statusMap.put("bill_01", "PAID");
+statusMap.put("bill_02", "PENDING");
+
+// Inline processing using BiConsumer lambda inside forEach
+statusMap.forEach((billId, status) -> 
+    System.out.println("Alert: Bill " + billId + " is currently " + status)
+);
+```
+
+4. **Production Context (Centralized Performance & Telemetry Tracking Hook)**
+Enterprise architectures often use a `BiConsumer` inside wrapper methods to cleanly pass back a primary data result paired with runtime metadata (like execution timing) to separate logging or tracking frameworks.
+```java
+// Centralized Wrapper Method using a BiConsumer to log execution details after completion
+public static <T> T dbGetWithTiming(Supplier<T> action, BiConsumer<T, Long> telemetryHook, String serviceName) {
+    long startTime = System.currentTimeMillis();
+    try {
+        T result = action.get(); // 1. Fetch data via Supplier
+        long duration = System.currentTimeMillis() - startTime;
+        
+        // 2. Pass both the result data AND the duration context to the BiConsumer
+        telemetryHook.accept(result, duration); 
+        
+        return result;
+    } catch (Exception e) {
+        logger.error("DB GET FAILED for service: {}", serviceName);
+        throw new DatabaseException();
+    }
+}
+
+// Enterprise Call: Fetches database entries and logs the response payload paired with execution speed
+BillDetailsResponse response = OperationExecutor.dbGetWithTiming(
+    () -> billRepository.findById(billId),
+    (billData, timeTaken) -> logger.info("Bill ID: {} processed in {} ms", billData.getId(), timeTaken),
+    "BillService"
+);
+```
+
+---
+
+
+## `Function<T, R>`
+
+```java
+package java.util.function;
+
+import java.util.Objects;
+
+@FunctionalInterface
+public interface Function<T, R> {
+
+    R apply(T t);
+
+    default <V> Function<V, R> compose(Function<? super V, ? extends T> before) {
+        Objects.requireNonNull(before);
+        return (V v) -> apply(before.apply(v));
+    }
+
+    default <V> Function<T, V> andThen(Function<? super R, ? extends V> after) {
+        Objects.requireNonNull(after);
+        return (T t) -> after.apply(apply(t));
+    }
+
+    static <T> Function<T, T> identity() {
+        return t -> t;
+    }
+}
+```
+
+- **Methods:** It contains exactly one abstract method: `R apply(T t)`. It also contains default methods `compose` and `andThen` for pipeline chaining, alongside a static `identity()` method.
+- **Input Parameters:** **One** (Accepts a single argument of generic type `T`).
+- **Output / Return Type:** **`R`** (Returns a transformed result object of generic type `R`).
+- **Meaning:** It represents a transformer that takes an input value, processes it, and converts it into a completely different type or value as an output.
+- **When to Use:** Use it when you need to transform, convert, map, or map-reduce objects from one state/class to another.
+  - *Data Transformation (`Stream.map`):* Converting data models, such as turning an input collection of user entities into a collection of primitive user names.
+  - *Data Parsing:* Converting incoming text configurations or payloads into primitive structures (e.g., converting a numerical String input into an `Integer`).
+  - *DTO Mapping:* Transforming database domain entities directly into secure outbound API data transfer objects (DTOs).
+  - *Encryption / Hashing:* Taking a plain text password argument and running it through a transformation algorithm to yield a hashed string out.
+  - *Enterprise Architecture (Centralised Processing Pipelines):* Passing data conversion actions (like mapping entities to DTOs) down into an execution block that wraps the processing with standardized exception logging or metrics collection.
+
+**How to Use Function**
+
+1. **Traditional Anonymous Inner Class (Legacy Approach)**
+Before Java 8, you had to implement the interface using an anonymous class:
+```java
+import java.util.function.Function;
+
+Function<String, Integer> stringLength = new Function<String, Integer>() {
+    @Override
+    public Integer apply(String text) {
+        return text.length();
+    }
+};
+
+System.out.println("Length: " + stringLength.apply("Decode")); // Output: 6
+```
+
+2. **Modern Lambda Expression (Java 8+ Approach)**
+Because Function is a functional interface, you can replace the bulky anonymous class with a clean, concise lambda expression:
+```java
+import java.util.function.Function;
+
+Function<String, Integer> stringLength = text -> text.length();
+
+System.out.println("Length: " + stringLength.apply("Decode")); // Output: 6
+```
+
+3. **Inline Direct Execution**
+You can pass the lambda expression directly into collection streaming frameworks like `Stream.map()` to process transformations inline:
+```java
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+
+List<String> names = Arrays.asList("alex", "brian", "charles");
+
+// Inline data mapping transformation using a Function lambda
+List<String> uppercaseNames = names.stream()
+    .map(name -> name.toUpperCase())
+    .collect(Collectors.toList());
+```
+
+4. **Production Context (Centralised DTO Mapping Wrapper)**
+Enterprise platforms pass transformation blocks as a `Function` parameter inside centralized wrappers. If a mapping tool crashes due to null pointers, the handler traps the exception globally and yields a standard business exception instead of leaking system stacks.
+```java
+// Centralised Execution Wrapper inside OperationExecutor
+public static <T, R> R map(Function<T, R> transformer, T sourceData, String serviceName, String methodName) {
+    try {
+        return transformer.apply(sourceData); // Triggers the transformation mapping block
+    } catch (Exception MapEx) {
+        logger.error("DTO Mapping FAILED: {} | Service: {} | Method: {}", 
+            MapEx.getMessage(), serviceName, methodName);
+        throw new DataProcessingException(); // Standard corporate exception fallback
+    }
+}
+
+// Enterprise Call: Maps a raw database entity into a clean response DTO safely
+BillDetailsResponse response = OperationExecutor.map(
+    entity -> new BillDetailsResponse(entity.getId(), entity.getAmount()),
+    billEntity,
+    "BillService", "getBillById"
+);
+```
 
 
 
