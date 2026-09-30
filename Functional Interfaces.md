@@ -482,6 +482,349 @@ BillDetailsResponse response = OperationExecutor.map(
 ```
 
 
+---
+
+
+
+
+# `BiFunction<T, U, R>`
+
+```java
+package java.util.function;
+
+import java.util.Objects;
+
+@FunctionalInterface
+public interface BiFunction<T, U, R> {
+
+    R apply(T t, U u);
+
+    default <V> BiFunction<T, U, V> andThen(Function<? super R, ? extends V> after) {
+        Objects.requireNonNull(after);
+        return (T t, U u) -> after.apply(apply(t, u));
+    }
+}
+```
+
+- **Methods:** It contains exactly one abstract method: `R apply(T t, U u)`. It also contains a default method `andThen` for chaining the output to another regular `Function`.
+- **Input Parameters:** **Two** (Accepts two distinct arguments: the first of generic type `T` and the second of generic type `U`).
+- **Output / Return Type:** **`R`** (Returns a transformed result object of generic type `R`).
+- **Meaning:** It represents a combined transformer or processor that takes two independent inputs, executes an operation using both variables, and merges or translates them into an entirely new output type.
+- **When to Use:** Use it when you need to calculate, combine, or map pairs of data objects into a fresh result.
+  - *Data Combination & Aggregation:* Merging two different items (e.g., combining a product record and a tax rate modifier) to calculate a final net cost result.
+  - *Contextual Object Mapping:* Converting a core database entity into a secure DTO while requiring an external metadata object (like user permissions or role context) to strip sensitive fields dynamically during transformation.
+  - *Binary Mathematical Computations:* Performing math or logic functions on two discrete values (e.g., coordinates, weights, or dimensions) and producing a calculated output.
+  - *Collection Merging (`Map.merge`):* Overwriting or combining conflicting values under duplicate keys inside map collections during data consolidation.
+
+**How to Use BiFunction**
+
+1. **Traditional Anonymous Inner Class (Legacy Approach)**
+Before Java 8, you had to implement the interface using an anonymous class:
+```java
+import java.util.function.BiFunction;
+
+BiFunction<String, String, String> concatWithDash = new BiFunction<String, String, String>() {
+    @Override
+    public String apply(String left, String right) {
+        return left + "-" + right;
+    }
+};
+
+System.out.println(concatWithDash.apply("Java", "8")); // Output: Java-8
+```
+
+2. **Modern Lambda Expression (Java 8+ Approach)**
+Because BiFunction is a functional interface, you can replace the bulky anonymous class with a clean, concise lambda expression:
+```java
+import java.util.function.BiFunction;
+
+BiFunction<String, String, String> concatWithDash = (left, right) -> left + "-" + right;
+
+System.out.println(concatWithDash.apply("Java", "8")); // Output: Java-8
+```
+
+3. **Inline Direct Execution**
+You can pass the lambda expression directly into built-in map synchronization utilities like `Map.replaceAll()` or `Map.merge()` to alter stored pairs inline:
+```java
+import java.util.HashMap;
+import java.util.Map;
+
+Map<String, Integer> cart = new HashMap<>();
+cart.put("Laptop", 1200);
+cart.put("Mouse", 50);
+
+// Inline pricing update: Add a fixed $15 processing fee to all values using a BiFunction lambda
+cart.replaceAll((item, price) -> price + 15);
+```
+
+4. **Production Context (Centralised Contextual Mapping Wrapper)**
+Enterprise platforms leverage a `BiFunction` to pass data conversion actions that depend on external context records. The execution is wrapped centrally so any parsing crashes can be handled gracefully with business-specific exceptions.
+```java
+// Centralised Execution Wrapper inside OperationExecutor
+public static <T, U, R> R mapWithContext(BiFunction<T, U, R> transformer, T sourceData, U context, String serviceName) {
+    try {
+        return transformer.apply(sourceData, context); // Triggers the contextual transformation block
+    } catch (Exception MapEx) {
+        logger.error("Contextual DTO Mapping FAILED for service: {}", serviceName);
+        throw new DataProcessingException(); // Standard corporate exception fallback
+    }
+}
+
+// Enterprise Call: Maps a raw BillEntity into a DTO while checking a UserRole context object to toggle field visibility
+BillDetailsResponse response = OperationExecutor.mapWithContext(
+    (billEntity, userRole) -> new BillDetailsResponse(
+        billEntity.getId(), 
+        userRole.isAdmin() ? billEntity.getSecretRoutingCode() : "MASKED"
+    ),
+    billEntity,
+    currentUserRole,
+    "BillService"
+);
+```
+
+---
+
+
+
+# `Predicate<T>`
+
+```java
+package java.util.function;
+
+import java.util.Objects;
+
+@FunctionalInterface
+public interface Predicate<T> {
+
+    boolean test(T t);
+
+    default Predicate<T> and(Predicate<? super T> other) {
+        Objects.requireNonNull(other);
+        return (t) -> test(t) && other.test(t);
+    }
+
+    default Predicate<T> negate() {
+        return (t) -> !test(t);
+    }
+
+    default Predicate<T> or(Predicate<? super T> other) {
+        Objects.requireNonNull(other);
+        return (t) -> test(t) || other.test(t);
+    }
+
+    static <T> Predicate<T> isEqual(Object targetRef) {
+        return (null == targetRef)
+                ? Objects::isNull
+                : object -> targetRef.equals(object);
+    }
+}
+```
+
+- **Methods:** It contains exactly one abstract method: `boolean test(T t)`. It also contains default methods `and`, `or`, and `negate` for conditional chaining, along with a static `isEqual` factory method.
+- **Input Parameters:** **One** (Accepts a single argument of generic type `T`).
+- **Output / Return Type:** **`boolean`** (Returns `true` if the condition is satisfied, otherwise `false`).
+- **Meaning:** It represents a boolean-valued function or condition checker that takes an input data item and evaluates whether it meets specific filtering or verification criteria.
+- **When to Use:** Use it when you need to filter streams, assess true/false states, check business invariants, or perform data verification logic.
+  - *Data Filtering (`Stream.filter`):* Sifting through a dataset to retain only elements that match a targeted condition (e.g., extracting active users from a master list).
+  - *Data Validation:* Verifying if an object's state conforms to strict input expectations (e.g., checking if an incoming bill payload has a non-negative transaction total).
+  - *Access & Authorization Checks:* Testing an operation context to determine if a set of criteria permits execution (e.g., checking if a user profile holds premium entitlement status).
+  - *Conditional Processing:* Checking system states before executing complex routines (e.g., determining whether a retry pipeline should attempt a database write based on the nature of the error code).
+
+**How to Use Predicate**
+
+1. **Traditional Anonymous Inner Class (Legacy Approach)**
+Before Java 8, you had to implement the interface using an anonymous class:
+```java
+import java.util.function.Predicate;
+
+Predicate<String> isLongText = new Predicate<String>() {
+    @Override
+    public boolean test(String text) {
+        return text.length() > 5;
+    }
+};
+
+System.out.println("Result: " + isLongText.test("Decode")); // Output: true
+```
+
+2. **Modern Lambda Expression (Java 8+ Approach)**
+Because Predicate is a functional interface, you can replace the bulky anonymous class with a clean, concise lambda expression:
+```java
+import java.util.function.Predicate;
+
+Predicate<String> isLongText = text -> text.length() > 5;
+
+System.out.println("Result: " + isLongText.test("Decode")); // Output: true
+```
+
+3. **Inline Direct Execution**
+You can pass the lambda expression directly into collection stream pipelines like `Stream.filter()` to process data exclusion inline:
+```java
+import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
+
+List<Integer> amounts = Arrays.asList(150, 45, 300, 12, 90);
+
+// Inline item filtering using a Predicate lambda condition
+List<Integer> highValues = amounts.stream()
+    .filter(val -> val >= 100)
+    .collect(Collectors.toList());
+```
+
+4. **Production Context (Centralised Validation Framework)**
+Enterprise backends pass validation constraints as a `Predicate` into defensive code wrappers. This evaluates data boundaries globally, catching any unexpected parsing errors and translating them into standard localized validation alerts.
+```java
+// Centralised Execution Wrapper inside OperationExecutor
+public static <T> void validate(Predicate<T> businessRule, T payload, String serviceName, String fieldName) {
+    try {
+        // Evaluates the rule package against the target payload object
+        if (!businessRule.test(payload)) {
+            logger.warn("Validation failure on field: {} inside service: {}", fieldName, serviceName);
+            throw new InvalidDataException(); // Standard corporate validation failure bubble
+        }
+    } catch (InvalidDataException e) {
+        throw e;
+    } catch (Exception e) {
+        logger.error("System crash during validation evaluation: {}", e.getMessage());
+        throw new DataProcessingException();
+    }
+}
+
+// Enterprise Call: Evaluates an incoming billing record payload against a custom rule predicate safely
+OperationExecutor.validate(
+    bill -> bill.getAmount() > 0 && bill.getCurrency() != null,
+    incomingBillPayload,
+    "BillService", "billingPricingDetails"
+);
+```
+
+
+
+---
+
+
+
+
+## `BiPredicate<T, U>`
+
+```java
+package java.util.function;
+
+import java.util.Objects;
+
+@FunctionalInterface
+public interface BiPredicate<T, U> {
+
+    boolean test(T t, U u);
+
+    default BiPredicate<T, U> and(BiPredicate<? super T, ? super U> other) {
+        Objects.requireNonNull(other);
+        return (t, u) -> test(t, u) && other.test(t, u);
+    }
+
+    default BiPredicate<T, U> negate() {
+        return (t, u) -> !test(t, u);
+    }
+
+    default BiPredicate<T, U> or(BiPredicate<? super T, ? super U> other) {
+        Objects.requireNonNull(other);
+        return (t, u) -> test(t, u) || other.test(t, u);
+    }
+}
+```
+
+- **Methods:** It contains exactly one abstract method: `boolean test(T t, U u)`. It also contains default methods `and`, `or`, and `negate` for conditional logic chaining.
+- **Input Parameters:** **Two** (Accepts two separate arguments: the first of generic type `T` and the second of generic type `U`).
+- **Output / Return Type:** **`boolean`** (Returns `true` if both inputs satisfy the combined condition, otherwise `false`).
+- **Meaning:** It represents a two-argument conditional checker that tests a relationship or cross-reference evaluation between two distinct data elements.
+- **When to Use:** Use it when an evaluation requires comparing or validating two separate objects together rather than a single entity in isolation.
+  - *Credential Verification:* Checking if a provided username string matches a corresponding hashed password entry in a security map.
+  - *Contextual Validation:* Validating a business request object against a separate active user session profile to see if the action is permitted.
+  - *Data Comparison & Thresholds:* Evaluating if a transaction's value exceeds a user's specific account balance limit parameter.
+  - *Relationship Filters:* Filtering collections where items are matched dynamically based on a changing criteria object (e.g., matching a product line against a user's localized tax code).
+
+**How to Use BiPredicate**
+
+1. **Traditional Anonymous Inner Class (Legacy Approach)**
+Before Java 8, you had to implement the interface using an anonymous class:
+```java
+import java.util.function.BiPredicate;
+
+BiPredicate<String, Integer> checkLength = new BiPredicate<String, Integer>() {
+    @Override
+    public boolean test(String text, Integer length) {
+        return text.length() == length;
+    }
+};
+
+System.out.println("Match: " + checkLength.test("Decode", 6)); // Output: true
+```
+
+2. **Modern Lambda Expression (Java 8+ Approach)**
+Because BiPredicate is a functional interface, you can replace the bulky anonymous class with a clean, concise lambda expression:
+```java
+import java.util.function.BiPredicate;
+
+BiPredicate<String, Integer> checkLength = (text, length) -> text.length() == length;
+
+System.out.println("Match: " + checkLength.test("Decode", 6)); // Output: true
+```
+
+3. **Inline Direct Execution**
+You can use a BiPredicate inside complex map validation routines or custom collection processing paths to filter relational data:
+```java
+import java.util.function.BiPredicate;
+
+BiPredicate<Integer, Integer> isOverdraft = (balance, withdrawal) -> withdrawal > balance;
+
+boolean alertUser = isOverdraft.test(500, 650); // Evaluates directly to true
+```
+
+4. **Production Context (Centralised Contextual Rule Wrapper)**
+Enterprise backends leverage `BiPredicate` inside authorization or gatekeeper wrappers. It cross-checks data requests against runtime transaction restrictions, preventing system bypass exploits.
+```java
+// Centralised Execution Wrapper inside OperationExecutor
+public static <T, U> void authorize(BiPredicate<T, U> safetyRule, T payload, U context, String serviceName) {
+    try {
+        // Cross-checks the business request against active structural constraints
+        if (!safetyRule.test(payload, context)) {
+            logger.warn("Security Alert: Unauthorized operation block intercepted in {}", serviceName);
+            throw new UnauthorizedAccessException(); // Standard corporate security bubble
+        }
+    } catch (UnauthorizedAccessException e) {
+        throw e;
+    } catch (Exception e) {
+        logger.error("System crash during authorization checks: {}", e.getMessage());
+        throw new DataProcessingException();
+    }
+}
+
+// Enterprise Call: Verifies if a user has sufficient spending balance before processing a bill payout
+OperationExecutor.authorize(
+    (billPayload, accountProfile) -> accountProfile.getBalance() >= billPayload.getAmount(),
+    incomingBillPayload,
+    activeUserAccount,
+    "BillService"
+);
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
