@@ -1,3 +1,21 @@
+# Table
+
+| Interface Name | Abstract Method | Default Methods (Chaining) | Static Methods | Input Parameters | Output / Return Type | Simplified Meaning (Rule of Thumb) |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **`Runnable`** | `void run()` | *None* | *None* | **None** | **`void`** | **Just go do something.** (No inputs, no outputs). |
+| **`Supplier<T>`** | `T get()` | *None* | *None* | **None** | **`T`** | **Give me something.** (No inputs, just returns a value). |
+| **`Consumer<T>`** | `void accept(T t)` | `andThen(Consumer)` | *None* | **One** (`T`) | **`void`** | **Do something with this one thing.** (Takes an input, returns nothing). |
+| **`BiConsumer<T, U>`** | `void accept(T t, U u)` | `andThen(BiConsumer)` | *None* | **Two** (`T`, `U`) | **`void`** | **Do something with these two things.** (Takes two inputs, returns nothing). |
+| **`Function<T, R>`** | `R apply(T t)` | `andThen(Function)` <br> `compose(Function)` | `identity()` | **One** (`T`) | **`R`** | **Take this thing and change it into that thing.** (Transforms one input into an output). |
+| **`BiFunction<T, U, R>`** | `R apply(T t, U u)` | `andThen(Function)` | *None* | **Two** (`T`, `U`) | **`R`** | **Take these two things and combine/change them into a new thing.** (Transforms two inputs into one output). |
+| **`Predicate<T>`** | `boolean test(T t)` | `and(Predicate)` <br> `or(Predicate)` <br> `negate()` | `isEqual(Object)` <br> `not(Predicate)`* | **One** (`T`) | **`boolean`** | **Check if this one thing matches a condition.** (Takes an input, returns true or false). |
+| **`BiPredicate<T, U>`** | `boolean test(T t, U u)` | `and(BiPredicate)` <br> `or(BiPredicate)` <br> `negate()` | *None* | **Two** (`T`, `U`) | **`boolean`** | **Check if these two things match a relationship condition.** (Takes two inputs, returns true or false). |
+
+
+
+---
+
+
 # Functional Interface
 
 A **Functional Interface** in Java is an interface that contains **exactly one abstract method**. They form the backbone of modern Java programming and lambda expressions. 
