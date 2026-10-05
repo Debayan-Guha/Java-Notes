@@ -289,15 +289,320 @@ public class ScheduledThreadPoolExample {
 }
 ```
 
+---
 
 
+# Java Concurrency: The `Future` Interface & Exception Handling
+
+A **`Future`** represents the result of an asynchronous computation. When you submit a `Callable` task to an `ExecutorService`, it immediately returns a `Future` object. You can think of it as a placeholder or a receipt for a result that will be ready at some point in the future.
+
+When you submit a task to an executor, you are not storing the final value right away; instead, you are storing a reference (or handle) to get the value in the future after the task finishes execution. We need `Future` because when a background thread starts running, it has not finished yet, so it does not possess the result immediately. The `Future` acts as a thread-safe bridge to retrieve that result whenever it becomes available.
 
 
+## Key Methods & API Contract
+
+| Method Signature | Description | Blocking Behavior |
+| :--- | :--- | :--- |
+| `V get()` | Waits if necessary for the computation to complete, and then retrieves its result. | **Blocks** indefinitely until the task finishes. |
+| `V get(long timeout, TimeUnit unit)` | Waits up to the given timeout for the computation to complete, and then retrieves its result. | **Blocks** up to the specified timeout; throws `TimeoutException` if it expires. |
+| `boolean cancel(bool mayInterruptIfRunning)` | Attempts to cancel execution of this task. | Non-blocking. Returns `false` if the task already completed, cancelled, or couldn't be cancelled. |
+| `boolean isDone()` | Returns `true` if this task completed normally, threw an exception, or was cancelled. | Non-blocking. |
+| `boolean isCancelled()` | Returns `true` if this task was cancelled before it normal completed. | Non-blocking. |
 
 
+## Exception Handling with `Future`
+
+When something goes wrong inside a background task, the error doesn't crash your main thread immediately. Here is what happens instead:
+
+1. **Captured & Stored**: The background thread catches any error or exception and holds it safely inside the `Future` object.
+2. **`ExecutionException`**: When you finally call `future.get()` to collect your result, the `Future` hands you the error wrapped inside an `ExecutionException`. You unpack it using `.getCause()` to see the original error.
+3. **`InterruptedException`**: Thrown if your main thread was waiting for the result, but someone interrupted it.
+4. **`TimeoutException`**: Thrown if you set a timer on `get(timeout)` and the task took too long to finish.
 
 
+## Code Example: `Future` Lifecycle & Exception Handling
 
+```java
+import java.util.concurrent.*;
+
+public class FutureExceptionHandlingExample {
+    public static void main(String[] args) {
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+
+        // Submitting a Callable task that throws an exception
+        Future<String> future = executor.submit(() -> {
+            System.out.println("Task starting...");
+            Thread.sleep(1000);
+            // Simulate an unexpected runtime error in background task
+            if (true) {
+                throw new IllegalArgumentException("Invalid data payload provided!");
+            }
+            return "Task Success Result";
+        });
+
+        // Doing other non-blocking work on the main thread while task runs...
+        System.out.println("Main thread is doing other work...");
+
+        try {
+            // Non-blocking check to see if task finished
+            while (!future.isDone()) {
+                System.out.println("Task is still running... waiting...");
+                Thread.sleep(300);
+            }
+
+            // Attempting to retrieve the result (this will throw the stored exception)
+            String result = future.get();
+            System.out.println("Result: " + result);
+
+        } catch (InterruptedException e) {
+            // Thrown if the current thread was interrupted while waiting
+            System.err.println("Main thread was interrupted: " + e.getMessage());
+            Thread.currentThread().interrupt(); // Restore interrupted status
+        } catch (ExecutionException e) {
+            // Thrown when the background task itself threw an exception
+            System.err.println("Task failed with exception: " + e.getCause().getMessage());
+        } finally {
+            // Always shut down your executor service
+            executor.shutdown();
+        }
+    }
+}
+```
+
+---
+
+
+# Java Concurrency: `Runnable` vs `Callable`
+
+
+## Interface Comparison & Contracts
+
+| Feature | `Runnable` | `Callable<V>` |
+| :--- | :--- | :--- |
+| **Method Signature** | `void run()` | `V call() throws Exception` |
+| **Return Value** | None (`void`) | Returns a generic type (`V`) |
+| **Checked Exceptions** | Cannot throw checked exceptions | Can throw checked exceptions |
+| **Execution Mechanism** | Submitted via `Executor.execute()` or `ExecutorService.submit()` | Submitted via `ExecutorService.submit()` (returns a `Future`) |
+
+
+## Core Characteristics
+
+### `Runnable`
+* Designed for **fire-and-forget** tasks or routines where you only care that the code runs, but do not need a result sent back.
+* Because its method signature returns `void`, it cannot communicate success values or calculation results back to the caller thread.
+
+### `Callable<V>`
+* Designed for tasks that compute a result and need to report it back.
+* Can throw checked exceptions directly from its `call()` method, which are then securely packaged into an `ExecutionException` when retrieved via `Future.get()`.
+
+
+## Code Example: `Runnable` vs `Callable` in Action
+
+```java
+import java.util.concurrent.*;
+
+public class TaskInterfacesExample {
+    public static void main(String[] args) throws InterruptedException, ExecutionException {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        // 1. Runnable Task (No return value, void)
+        Runnable runnableTask = () -> {
+            System.out.println("Runnable running on: " + Thread.currentThread().getName());
+            // Cannot return anything or throw checked exceptions
+        };
+
+        // 2. Callable Task (Returns a value and can throw exceptions)
+        Callable<Integer> callableTask = () -> {
+            System.out.println("Callable running on: " + Thread.currentThread().getName());
+            Thread.sleep(500);
+            return 42; // Returns a computation result
+        };
+
+        // Submitting Runnable (returns Future<?> which yields null on get())
+        Future<?> runnableFuture = executor.submit(runnableTask);
+
+        // Submitting Callable (returns Future<Integer>)
+        Future<Integer> callableFuture = executor.submit(callableTask);
+
+        // Retrieve results
+        runnableFuture.get(); // Blocks until runnable completes, returns null
+        System.out.println("Runnable task finished.");
+
+        Integer result = callableFuture.get(); // Blocks until callable completes, returns 42
+        System.out.println("Callable task result: " + result);
+
+        executor.shutdown();
+    }
+}
+```
+
+---
+
+
+# ExecutorService Methods
+
+## 1. `invokeAll()` and `invokeAny()`
+
+When dealing with multiple asynchronous tasks, submitting them one by one in a loop can be tedious and inefficient. The **`ExecutorService`** interface provides two powerful batch-execution methods—**`invokeAll()`** and **`invokeAny()`**—to manage collections of `Callable` tasks effortlessly.
+
+
+### Characteristics & Comparison
+
+#### `invokeAll()`
+* **All-Or-None Synchronization**: It submits every task in the provided collection and blocks until the last task finishes executing.
+* **Return Type**: Returns a `List<Future<V>>` in the exact same iterator order as the original task collection, allowing you to inspect individual successes, failures, or cancellations.
+* **Bulk Processing**: Ideal when you need parallel processing for independent sub-tasks (e.g., fetching data from three different APIs simultaneously) and need all results before proceeding.
+* **Exception Handling**: Individual task exceptions do not crash the `invokeAll()` method call. Instead, each exception is captured inside its respective `Future`. Calling `future.get()` on a failed task throws an `ExecutionException`, which you can unpack using `.getCause()`.
+
+#### `invokeAny()`
+* **Race Condition / Fastest Wins**: It submits all tasks concurrently, but the moment the **very first task** successfully returns a result, all other running tasks in the batch are automatically cancelled.
+* **Return Type**: Returns the direct result value (`V`) of the winning task—**not** a `Future`.
+* **Redundancy & Fallbacks**: Ideal when you have identical backup services or mirror servers and want the result from whichever responds the fastest.
+
+---
+
+### Exception Handling with Batch Methods
+
+#### Exception Handling in `invokeAll()`
+* Because `invokeAll()` returns a list of individual `Future` objects, **individual task exceptions do not crash the batch method call**. 
+* Instead, each task captures its own exception. When you iterate through the returned `Future` list and call `future.get()`, it throws an `ExecutionException` for that specific failed task.
+
+#### Exception Handling in `invokeAny()`
+* If a task throws an exception during `invokeAny()`, it is silently ignored **unless** all tasks in the collection fail.
+* If every single task throws an exception, `invokeAny()` throws an **`ExecutionException`** containing a summary of the failures. If the time limit expires before any task succeeds, it throws a `TimeoutException`.
+
+
+### Code Example: `invokeAll()` & `invokeAny()` in Action
+
+```java
+import java.util.Arrays;
+import java.util.List;
+import java.util.concurrent.*;
+
+public class BatchExecutionExample {
+    public static void main(String[] args) {
+        ExecutorService executor = Executors.newFixedThreadPool(3);
+
+        List<Callable<String>> tasks = Arrays.asList(
+            () -> {
+                Thread.sleep(800);
+                return "Task A Result (Slow)";
+            },
+            () -> {
+                Thread.sleep(200);
+                return "Task B Result (Fast)";
+            },
+            () -> {
+                Thread.sleep(500);
+                return "Task C Result (Medium)";
+            }
+        );
+
+        try {
+            System.out.println("=== Testing invokeAny() == (Wants the fastest)");
+            // Returns the result of whichever task finishes first
+            String fastestResult = executor.invokeAny(tasks);
+            System.out.println("Fastest task won with: " + fastestResult);
+
+            System.out.println("\n=== Testing invokeAll() == (Wants all results)");
+            // Blocks until every task finishes, returns a list of Futures
+            List<Future<String>> futures = executor.invokeAll(tasks);
+
+            for (int i = 0; i < futures.size(); i++) {
+                try {
+                    // Calling get() on each future safely
+                    System.out.println("Index " + i + " -> " + futures.get(i).get());
+                } catch (ExecutionException e) {
+                    System.err.println("Task failed: " + e.getCause().getMessage());
+                }
+            }
+
+        } catch (InterruptedException e) {
+            System.err.println("Main thread interrupted: " + e.getMessage());
+            Thread.currentThread().interrupt();
+        } catch (ExecutionException e) {
+            System.err.println("All tasks failed in invokeAny: " + e.getCause().getMessage());
+        } finally {
+            executor.shutdown();
+        }
+    }
+}
+```
+
+---
+
+## 2. `awaitTermination()` & Shutdown Management
+
+When you call `executor.shutdown()`, it initiates an orderly shutdown where previously submitted tasks are executed, but no new tasks will be accepted. However, `shutdown()` is **non-blocking**—it returns immediately without waiting for the tasks to actually finish. 
+
+To safely wait for ongoing tasks to complete before letting the main program exit or proceed, you must use **`awaitTermination()`**.
+
+
+### Characteristics & Comparison
+
+#### `shutdown()` vs `shutdownNow()`
+* **`shutdown()`**: Stops accepting new tasks, lets running tasks continue to completion, and performs a graceful shutdown.
+* **`shutdownNow()`**: Stops accepting new threads, forcefully stops running threads (via interruption), and triggers an immediate shutdown while returning queued tasks.
+
+#### `awaitTermination()`
+* **Blocking Synchronization**: Blocks the current thread until all tasks have completed execution after a shutdown request, or the timeout occurs, or the current thread is interrupted.
+* **Return Type**: Returns `true` if the executor terminated successfully, and `false` if the timeout elapsed before termination completed.
+* **Graceful Shutdown Pattern**: Essential for ensuring background threads finish processing cleanly before the application shuts down or resources are released.
+* **If Threads Finish Early**: Unblocks immediately and returns `true` the moment all tasks complete, without making you wait for the full timeout duration.
+* **If Threads Take Longer**: Blocks until the specified timeout expires, then returns `false`, allowing you to catch the timeout and force a shutdown using `shutdownNow()`.
+
+
+### Exception Handling & Interruption
+
+* **`InterruptedException`**: If the thread waiting on `awaitTermination()` is interrupted while blocked, it throws an `InterruptedException`, clears the thread's interrupted status, and exits. You should restore the interrupt flag using `Thread.currentThread().interrupt()`.
+
+
+### The Problem Without `awaitTermination()`
+
+If you call **only** `executor.shutdown()` without `awaitTermination()`, the main thread continues executing immediately. If the main thread reaches the end of the program or closes resources (like database connections) while background worker threads are still running, those background tasks will be abruptly killed or fail mid-execution, causing unpredictable behavior or lost data.
+
+---
+
+## 5. Code Example: Graceful Shutdown with `awaitTermination()`
+
+```java
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+public class GracefulShutdownExample {
+    public static void main(String[] args) {
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+
+        executor.submit(() -> {
+            try {
+                Thread.sleep(1000);
+                System.out.println("Background task finished executing.");
+            } catch (InterruptedException e) {
+                System.out.println("Background task was interrupted.");
+            }
+        });
+
+        // Step 1: Initiate orderly shutdown (no new tasks accepted)
+        executor.shutdown();
+
+        try {
+            // Step 2: Block and wait up to 3 seconds for all tasks to finish
+            if (!executor.awaitTermination(3, TimeUnit.SECONDS)) {
+                System.err.println("Tasks did not finish in time, forcing shutdown now...");
+                executor.shutdownNow(); // Forcefully cancel remaining tasks if timeout expires
+            } else {
+                System.out.println("All tasks terminated gracefully.");
+            }
+        } catch (InterruptedException e) {
+            // Handle thread interruption while waiting
+            System.err.println("Main thread interrupted while waiting for termination.");
+            executor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
+}
+```
 
 
 
