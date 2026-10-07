@@ -384,6 +384,38 @@ public class FutureExceptionHandlingExample {
 }
 ```
 
+## why does `get()` block the main thread?
+
+Because you are explicitly asking:
+
+> "Give me the result of this task, and I am willing to wait until it is ready."
+
+If the task is not finished yet, `get()` has no choice but to wait. That is the whole purpose of `Future` — to give you a handle that you can call **at the right time**, not necessarily immediately after `submit()`.
+
+### Example: main thread is NOT blocked during submit
+
+```java
+Future<String> future = executor.submit(() -> {
+    Thread.sleep(5000);
+    return "Done";
+});
+
+// This line runs immediately, NOT after 5 seconds
+System.out.println("Task submitted, doing other work now...");
+
+// Only THIS line blocks until the task finishes
+String result = future.get();   // waits ~5 seconds
+```
+
+So:
+
+```text
+submit()  ->  non-blocking (returns Future immediately)
+get()     ->  blocking     (waits for the result)
+```
+
+The main thread is blocked **only at `get()`**, and only if the task has not already completed by that time.
+
 ---
 
 
