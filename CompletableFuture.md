@@ -271,3 +271,105 @@ public class AnyOfExample {
 ```
 
 
+
+---
+
+
+
+
+# Production Warning: The Danger of Unmanaged Asynchronous Tasks (ForkJoinPool Starvation, Thread Exhaustion & OOM)
+
+In our toy command-line examples, we call `future.get()` to block the `main` thread so the JVM doesn't shut down before background tasks finish.
+
+However, in a real-world **production application** (like a Spring Boot web
+server or enterprise service), the main thread never exits. This introduces a
+critical architectural danger if you fire-and-forget asynchronous tasks
+without proper lifecycle management.
+
+### 1. The Threat to the Common Pool (`ForkJoinPool.commonPool()`)
+
+By default, all asynchronous methods like `supplyAsync()` and `runAsync()` execute tasks on the shared **`ForkJoinPool.commonPool()`**.
+
+
+#### What is a pool?
+A set of reusable worker threads. Instead of creating a new thread per task, Java reuses a few threads.
+
+#### What is "shared"?
+Java creates one pool automatically at startup, and the **whole JVM** uses it — your code, libraries, and the JDK. That pool is `ForkJoinPool.commonPool()`.
+
+#### Why do async methods use it?
+When you call `supplyAsync()` without giving your own executor, Java still needs *some* thread to run the task. The common pool already exists, so Java uses it by default.
+
+```text
+No custom executor given  ->  common pool is used
+Custom executor given     ->  your pool is used
+```
+
+#### Why it's a problem:
+
+* The common pool has only `CPU cores - 1` threads.
+* If your application fires off long-running tasks or blocking I/O calls (e.g., waiting on a slow database or external API) without a custom executor, **all threads in the common pool can become blocked**.
+* This starves the entire JVM, causing unrelated features that rely on the common pool to freeze or fail.
+
+**Fix:** Pass your own bounded `ExecutorService` for blocking or long-running work.
+
+
+#### No Custom Executor vs Custom Executor
+
+- **No custom executor given → common pool is used**
+
+```java
+CompletableFuture.supplyAsync(() -> {
+    return fetchData();          // runs on ForkJoinPool.commonPool()
+});
+```
+
+- **Custom executor given → your pool is used**
+
+```java
+ExecutorService myPool = Executors.newFixedThreadPool(10);
+
+CompletableFuture.supplyAsync(() -> {
+    return fetchData();          // runs on myPool, NOT the common pool
+}, myPool);
+```
+
+**The only difference:** the second argument — your own `ExecutorService`.
+
+### 2. Infinite Loops & Resource Exhaustion
+
+If a background asynchronous task gets stuck in an infinite loop, throws unhandled errors repeatedly, or waits indefinitely for a dead resource:
+
+* The thread remains occupied forever.
+* If new requests continuously trigger this asynchronous operation, you will exhaust the thread pool.
+* Completed futures or their results that are retained by long-lived references (static lists, caches, listeners) will consume heap memory over time, eventually resulting in an **`OutOfMemoryError` (OOM)** or complete
+  server crash.
+
+### 3. Best Practices for Production
+
+* **Never use the default pool for blocking I/O**: Always pass a dedicated, bounded custom `ExecutorService` to your async tasks so you isolate resource limits:
+
+  ```java
+  ExecutorService customExecutor = new ThreadPoolExecutor(
+      10, 10,                       // core = max = 10
+      0L, TimeUnit.MILLISECONDS,
+      new ArrayBlockingQueue<>(100) // bounded queue
+  );
+  CompletableFuture.supplyAsync(() -> fetchExternalData(), customExecutor);
+  ```
+
+* **Always set timeouts**: Never let an async operation wait forever.
+
+  ```java
+  // Fails with TimeoutException
+  CompletableFuture.supplyAsync(() -> slowOperation())
+      .orTimeout(3, TimeUnit.SECONDS)
+      .exceptionally(ex -> fallbackResponse());
+
+  // Completes normally with a fallback value
+  CompletableFuture.supplyAsync(() -> slowOperation())
+      .completeOnTimeout("default", 3, TimeUnit.SECONDS);
+  ```
+
+* **Proper Shutdown**: Ensure your custom thread pools are gracefully shut down using `shutdown()` and `awaitTermination()` when your application context closes to prevent dangling background threads.
+
