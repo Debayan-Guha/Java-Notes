@@ -46,39 +46,35 @@ Instead of wrapping errors in an `ExecutionException` upon retrieval, `Completab
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
-public class CompletableFutureExample {
+public class ExceptionHandlingDemo {
     public static void main(String[] args) throws ExecutionException, InterruptedException {
         
-        System.out.println("Main thread starts processing...");
-
-        // 1. Asynchronous supply: Fetching user ID asynchronously
-        CompletableFuture<String> futurePipeline = CompletableFuture.supplyAsync(() -> {
-            System.out.println("Fetching user ID on thread: " + Thread.currentThread().getName());
-            // Simulate delay
-            try { Thread.sleep(500); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-            
-            // Simulate error condition
-            if (false) { throw new RuntimeException("Database down!"); }
-            
-            return "User_1049";
+        // 1. Using exceptionally() - Returns a fallback value if an error occurs
+        String resultExceptionally = CompletableFuture.supplyAsync(() -> {
+            if (true) { throw new RuntimeException("Database error!"); }
+            return "Success Data";
         })
-        // 2. Chaining: Transform user ID to user profile data
-        .thenApply(userId -> {
-            System.out.println("Fetching profile for " + userId + " on thread: " + Thread.currentThread().getName());
-            return "Profile Data for [" + userId + "]";
-        })
-        // 3. Error Handling fallback if anything above fails
         .exceptionally(ex -> {
-            System.err.println("Error occurred: " + ex.getMessage());
-            return "Default Guest Profile";
-        });
+            System.out.println("Caught via exceptionally: " + ex.getMessage());
+            return "Fallback Default Data";
+        })
+        .get();
+        System.out.println("Result with exceptionally: " + resultExceptionally);
 
-        // Main thread can continue doing other work here...
-        System.out.println("Main thread doing other work while async pipeline runs...");
-
-        // 4. Blocking only at the very end to get final result (or use thenAccept for non-blocking end)
-        String finalResult = futurePipeline.get();
-        System.out.println("Final Result Received: " + finalResult);
+        // 2. Using handle() - Receives both result and exception to handle both cases
+        String resultHandle = CompletableFuture.supplyAsync(() -> {
+            if (true) { throw new RuntimeException("API error!"); }
+            return "Success Data";
+        })
+        .handle((res, ex) -> {
+            if (ex != null) {
+                System.out.println("Caught via handle: " + ex.getMessage());
+                return "Recovered from Error";
+            }
+            return res.toUpperCase();
+        })
+        .get();
+        System.out.println("Result with handle: " + resultHandle);
     }
 }
 ```
