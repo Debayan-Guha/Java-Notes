@@ -2,19 +2,90 @@
 
 An **abstract class** is a restricted class that cannot be instantiated on its own and serves as a common template or blueprint for subclasses to extend and implement.
 
+
 ## Key Characteristics
 
-* **`abstract` Keyword**: Must be declared using the `abstract` keyword in its class header.
-* **Cannot Be Instantiated**: You cannot create an object of an abstract class using the `new` keyword (e.g., `Shape s = new Shape();` results in a compile-time error).
+* **Instantiation Limitations**: You cannot create an object of an abstract class using the `new` keyword (e.g., `Shape s = new Shape();` results in a compile-time error). It serves strictly as a blueprint to be extended by other classes.
 * **Mixed Method Types**: Can contain both **abstract methods** (methods without a body that *must* be implemented by subclasses) and **concrete methods** (fully implemented methods that subclasses inherit directly).
-* **Constructor Support**: Can have constructors, instance variables, and static methods, which are executed when a subclass is instantiated.
-* **Mandatory Subclass Implementation**: Any non-abstract subclass extending an abstract class *must* provide implementations for all inherited abstract methods.
+* **Mandatory Subclass Implementation**: Any non-abstract subclass extending an abstract class *must* provide implementations for all inherited abstract methods in the chain. If any abstract method is left unimplemented, the subclass itself must be declared abstract.
+* **Constructor Support**: Abstract classes **can have constructors**, which are automatically **called when a concrete subclass is instantiated** (via `super(...)`), even though you **cannot** create an object of the abstract class directly. This structural support means an abstract class can safely house constructors, instance variables, and static methods, all of which execute, resolve, or initialize within the runtime context of the subclass execution.
+* **Variable Flexibility**: Abstract classes **can have instance variables (fields)**. Unlike interfaces where fields are implicitly public, static, and final, fields in an abstract class can be **`final`**, **`static`**, or **non-final** (regular fields) with any access modifier.
+* **Inheritance Hierarchy & Abstract Extensions**: Abstract classes **can extend other abstract classes**, allowing you to build multi-layered type structures where methods can remain unimplemented. However, a concrete subclass down the line **must implement all abstract methods in the entire hierarchy**—not just the ones declared in its immediate parent. If any abstract method from any ancestor is left unimplemented, the subclass cannot be instantiated and must also be declared abstract.
 
-## Constructor in Abstract Class
 
-* Abstract classes **can have constructors**.
-* The constructor is **called when a concrete subclass is instantiated** (through `super(...)`).
-* You still **cannot** create an object of the abstract class directly.
+### Examples
+
+#### 1. Instantiation Limitations Example
+
+```java
+abstract class Shape {
+    abstract void draw();
+}
+
+public class Example {
+    public static void main(String[] args) {
+        // Compile-time error: Shape is abstract; cannot be instantiated
+        // Shape s = new Shape(); 
+    }
+}
+```
+
+#### 2. Mixed Method Types Example
+
+```java
+abstract class Shape {
+    // 1. Abstract method: Has no body, must be overridden by a subclass
+    abstract double calculateArea();
+
+    // 2. Concrete method: Fully implemented, inherited directly by subclasses
+    void printDetails() {
+        System.out.println("This is a geometric shape tool.");
+    }
+}
+
+class Circle extends Shape {
+    double radius = 5.0;
+
+    @Override
+    double calculateArea() {
+        return Math.PI * radius * radius;
+    }
+}
+
+public class Example {
+    public static void main(String[] args) {
+        Circle c = new Circle();
+        c.printDetails(); // Invoking inherited concrete method
+    }
+}
+```
+
+#### 3. Mandatory Subclass Implementation Example
+
+```java
+abstract class Shape {
+    abstract void render();
+    abstract void resize();
+}
+
+// Subclass leaves 'resize()' unimplemented, so it MUST be declared abstract
+abstract class GraphicElement extends Shape {
+    @Override
+    void render() {
+        System.out.println("Rendering graphic element...");
+    }
+}
+
+// Concrete subclass must implement the missing 'resize()' method to compile
+class ScreenBox extends GraphicElement {
+    @Override
+    void resize() {
+        System.out.println("Resizing screen box...");
+    }
+}
+```
+
+#### 4. Constructor Support Example
 
 ```java
 abstract class Shape {
@@ -23,7 +94,7 @@ abstract class Shape {
     // Abstract class constructor
     Shape(String color) {
         this.color = color;
-        System.out.println("Shape constructor called for: " + color);
+        System.out.println("Shape constructor called for: " + color);   // Shape constructor called for: Red
     }
 
     abstract double calculateArea();
@@ -35,7 +106,7 @@ class Circle extends Shape {
     Circle(String color, double radius) {
         super(color);   // calls abstract class constructor
         this.radius = radius;
-        System.out.println("Circle constructor called");
+        System.out.println("Circle constructor called");                // Circle constructor called
     }
 
     @Override
@@ -49,20 +120,15 @@ public class Example {
         Circle c = new Circle("Red", 5.0);
     }
 }
+
+/*
+ * Output:
+ * Shape constructor called for: Red
+ * Circle constructor called
+ */
 ```
 
-**Output:**
-
-```text
-Shape constructor called for: Red
-Circle constructor called
-```
-
-
-## Variables in Abstract Class
-
-* Abstract classes **can have instance variables (fields)**.
-* Fields can be **`final`**, **`static`**, or **non-final** (regular).
+#### 5. Variable Flexibility Example
 
 ```java
 abstract class Shape {
@@ -103,12 +169,7 @@ public class Example {
 }
 ```
 
-
-## Inheritance Hierarchy
-
-* Abstract classes **can extend other abstract classes**.
-* A concrete subclass **must implement all abstract methods** in the entire hierarchy — not just the ones declared in its immediate parent.
-* If any abstract method from any ancestor is left unimplemented, the class must also be declared abstract.
+#### 6. Inheritance Hierarchy & Abstract Extensions Example
 
 ```java
 // Level 1: abstract class
@@ -148,7 +209,7 @@ public class Example {
 }
 ```
 
-**Hierarchy:**
+**Hierarchy Structure:**
 
 ```text
 Shape (abstract)      -> calculateArea()
@@ -162,7 +223,7 @@ Circle (concrete)     -> implements calculateArea()
                       -> no abstract methods left -> can be instantiated
 ```
 
-**Rule:**
+**Rule Definition:**
 
 ```text
 Abstract extends abstract    -> allowed, may leave methods unimplemented
@@ -170,72 +231,8 @@ Concrete extends abstract    -> must implement ALL abstract methods in the hiera
 ```
 
 
-## Code Example
+---
 
-```java
-// 1. Abstract Class (Blueprint)
-abstract class Shape {
-    // Instance variable
-    String color;
-
-    // Abstract class constructor
-    Shape(String color) {
-        this.color = color;
-    }
-
-    /* 
-     * Abstract method: No body, must be implemented by subclasses.
-     * NOTE: If you remove the 'abstract' keyword and leave the method body blank 
-     * (e.g., void calculateArea() {}), the compiler will throw an error because 
-     * a regular method in Java MUST have a set of curly braces {} even if empty. 
-     * Abstract methods explicitly omit the body using a semicolon (;).
-     */
-    abstract double calculateArea();
-
-    // Concrete method: Has a body, shared by all subclasses
-    void displayColor() {
-        System.out.println("Shape color: " + color);
-    }
-}
-
-// 2. Concrete Subclass
-class Circle extends Shape {
-    double radius;
-
-    Circle(String color, double radius) {
-        super(color); // Calling abstract class constructor
-        this.radius = radius;
-    }
-
-    /* 
-     * Providing implementation for the abstract method: 
-     * Mandatory to implement this abstract method because abstract methods have no body 
-     * in the parent class; if a subclass fails to override them, the code will fail to compile.
-     */
-    @Override
-    double calculateArea() {
-        return Math.PI * radius * radius;
-    }
-}
-
-public class AbstractClassExample {
-    public static void main(String[] args) {
-        /*
-         * COMPILE-TIME ERROR if attempted:
-         * Shape shape = new Shape("Red");
-         * Reason: Abstract classes cannot be instantiated directly.
-         */
-
-        // Creating subclass object using upcasting
-        Shape myCircle = new Circle("Blue", 5.0);
-
-        myCircle.displayColor(); // Output: Shape color: Blue (Inherited concrete method)
-        
-        double area = myCircle.calculateArea(); 
-        System.out.println("Area: " + area); // Output: Area: 78.53... (Dynamic dispatch to Circle's method)
-    }
-}
-```
 
 # Why Use Abstract Classes?
 
