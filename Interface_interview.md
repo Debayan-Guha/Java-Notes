@@ -165,3 +165,40 @@ class UserProfile implements Cloneable {
     // JVM checks if 'this instanceof Cloneable' behind the scenes
 }
 ```
+
+---
+
+### 9. Can you declare static methods in an interface? What are the rules?
+**Yes, since Java 8, you can declare static methods inside an interface.**
+
+Interface static methods are designed to provide utility or helper functionalities directly related to the interface's domain, completely eliminating the need to create separate utility classes (like `Collections` or `Math`).
+
+#### Core Rules for Interface Static Methods:
+1. **Must Have a Body**: Unlike abstract methods, a static method inside an interface cannot be blank; it must provide a complete block implementation.
+2. **Not Inherited by Implementing Classes**: Unlike `default` methods or standard class inheritance, interface static methods are **not** inherited by classes that implement the interface. They belong strictly to the interface container itself.
+3. **Invocation via Interface Name Only**: Because they are not inherited, you cannot call an interface static method using an object reference variable or a subclass name. It must be called exclusively using the format `InterfaceName.methodName()`.
+4. **Cannot Be Overridden**: Implementing classes can define a method with the exact same name and signature, but it is treated as a completely fresh class method (method hiding), not an override.
+
+```java
+interface UtilityService {
+    // Declaring a valid static method with a body inside an interface
+    static void printSystemLog(String message) {
+        System.out.println("[SYSTEM LOG]: " + message);
+    }
+}
+
+class ServiceRunner implements UtilityService {
+    // Normal class logic
+}
+
+public class Example {
+    public static void main(String[] args) {
+        // RULE 3 IN ACTION: Must call via Interface Name
+        UtilityService.printSystemLog("App initialized."); // Output: [SYSTEM LOG]: App initialized.
+
+        ServiceRunner runner = new ServiceRunner();
+        // runner.printSystemLog("Failed"); 
+        // COMPILE-TIME ERROR: The method printSystemLog(String) is undefined for the type ServiceRunner
+    }
+}
+```
