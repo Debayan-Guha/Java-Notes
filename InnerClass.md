@@ -1,5 +1,3 @@
-# Interview Inner Classes (Nested Classes) Q&A
-
 ### 1. What are the different types of Nested Classes in Java?
 Java allows you to define a class inside another class. These are broadly divided into two categories:
 
