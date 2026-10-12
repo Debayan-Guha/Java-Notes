@@ -1181,6 +1181,700 @@ System.out.println(map);               // order not guaranteed
 ---
 
 
+### 6. Why doesn't `Map` extend the `Collection` interface?
+
+- **Collection** is a group of individual values (you just add items like `add(item)`).
+- **Map** is a key-value pair where every value needs a key to be stored (you use `put(key, value)`). 
+
+Because they store data completely differently, `Map` is kept separate from the `Collection` interface.
+
+#### What if `Map` *did* extend `Collection`?
+If `Map` extended `Collection`, it would inherit the single-item `add(item)` method. This would break how maps work, because a map requires **both a key and a value** (`put(key, value)`), not just a single object. It would also force maps to inherit an iterator that returns individual values instead of key-value pairs, which breaks the fundamental purpose of a map.
+
+
+---
+
+
+### 7. What is the difference between `ArrayList` and `LinkedList`? Which one is faster?
+The speed of these two structures depends entirely on the operational context, because their underlying memory tracking models are fundamentally distinct:
+
+| Operational Feature | `ArrayList` | `LinkedList` |
+| :--- | :--- | :--- |
+| **Underlying Structure** | Resizable dynamic array packed in contiguous memory slots. | Doubly Linked List where nodes point to neighbors. |
+| **Random Access (`get(index)`)**| **$O(1)$** - Instant access via index math. | **$O(n)$** - Must traverse nodes step-by-step. |
+| **Insertion/Deletion (Middle)**| **$O(n)$** - Shifting array elements in memory slots. | **$O(1)$** - Once positioned, just updates pointers. |
+| **Insertion/Deletion (End)** | **$O(1)$** amortized (Slows down only during array resizing). | **$O(1)$** via direct tracking pointer. |
+| **Memory Overhead** | Low (Only allocates data arrays). | High (Every node must store data and two addresses). |
+
+#### Code Selection Rules:
+* Use `ArrayList` when your application performs **frequent search or read operations** with minimal index shifting.
+* Use `LinkedList` if your workload relies on **constant additions and structural removals** at the terminal edges (acting as a Stack or Queue).
+
+
+
+---
+
+
+### 8. How does a `HashMap` work internally in Java? (Crucial Interview Topic)
+
+A `HashMap` stores **key-value pairs** and lets you look them up quickly using the key. It does this using a technique called **hashing**. The idea is simple: instead of searching through all the entries one by one, we use the key to compute a **number** that tells us exactly where to store or find the value.
+
+
+#### 1. The Internal Storage — Array of Buckets
+
+Internally, a `HashMap` is just an **array of slots**. Each slot is called a **bucket**.
+
+```text
+Index 
+  +---+
+0 |   |   ----> Buket
+  +---+
+1 |   |
+  +---+
+2 |   |
+  +---+
+3 |   |
+  +---+
+4 |   |
+  +---+
+5 |   |
+  +---+
+
+Default size when we initialize a hashmap = 16 buckets (indexes 0 to 15)
+```
+
+Each bucket can hold **one entry** (a key-value pair). If two keys map to the same bucket, that is called a **collision**, and the bucket can hold a chain of entries.
+
+
+#### 2. How `put(key, value)` Works — Step by Step
+
+When you call `map.put("Alice", 25)`, the following happens.
+
+**Step 1 — Compute the hash of the key**
+
+```java
+int hash = key.hashCode();
+```
+
+For example, if `"Alice".hashCode()` returns `63350368`, that is our raw hash.
+
+**Step 2 — Convert the hash into a bucket index**
+
+Java does some mixing on the hash and then uses bit-masking to fit it into the array size:
+
+```java
+int index = hash & (arrayLength - 1);   // if length is a power of 2
+```
+
+If the array has 16 buckets, only the low 4 bits of the hash are used to pick the index.
+
+```text
+hash   = ...1010 0011
+length = 16  ->  mask = 15 = 0000 1111
+index  = hash & mask = 0011 = 3
+```
+
+So the entry will go into bucket 3.
+
+**Step 3 — Look inside the bucket**
+
+Two cases.
+
+**Case A — Bucket is empty**
+
+```text
+Bucket 3 is empty
+  +---+
+3 |   |   ->  place new Node("Alice", 25) here
+  +---+
+```
+
+**Case B — Bucket already has an entry (collision)**
+
+```text
+Bucket 3 already contains Node("Bob", 30)
+  +-----+
+3 | Bob |
+  +-----+
+```
+
+If the new key equals the existing key (`equals()` returns `true`), the value is **overwritten**.
+
+If the keys are different, the new node is **appended to the chain** in that bucket.
+
+
+#### 3. What Is a Collision?
+
+A **collision** happens when two different keys produce the **same bucket index**. This is normal and expected because the array is much smaller than the space of all possible hashes.
+
+```text
+"Alice".hashCode()  ->  index 3
+"Bob".hashCode()    ->  index 3     (collision!)
+"Carol".hashCode()  ->  index 7
+```
+
+Both `"Alice"` and `"Bob"` land in bucket 3.
+
+
+#### 4. How Collisions Are Handled — Separate Chaining
+
+Java uses a technique called **separate chaining**. Instead of overwriting, each bucket can hold a **chain** of entries.
+
+```text
+Bucket 3:
+  +-------+    +-------+    +-------+
+  | Alice | -> |  Bob  | -> | Carol | -> null
+  +-------+    +-------+    +-------+
+```
+
+Each node in the chain stores:
+
+- the **hash** of the key,
+- the **key** itself,
+- the **value**,
+- a **next** pointer to the following node.
+
+```java
+static class Node<K, V> {
+    final int hash;
+    final K key;
+    V value;
+    Node<K, V> next;
+}
+```
+```txt
+[ HashMap Array ]       [ Bucket at Index 2 ]       [ Node 1 (Inside Bucket) ]
+                      
+  +---+
+0 |   |                  
+  +---+                  
+1 |   |                  
+  +---+        ┌────────┐       +-----------------------+
+2 | o-+───────►│ Bucket │──────►│ hash  = 3152          │
+  +---+        └────────┘       │ key   = "name"        │
+3 |   |                         │ value = "John"        │
+  +---+                         │ next  = ----> [Node2] │
+                                +-----------------------+
+```
+
+
+#### 5. How Lookup (`get`) Works
+
+When you call `map.get("Bob")`:
+
+1. Compute the hash of `"Bob"`.
+2. Convert the hash into a bucket index.
+3. Go to that bucket.
+4. If the bucket is empty, return `null`.
+5. If the bucket has entries, walk the chain and compare each key with `equals()`.
+6. If a match is found, return its value.
+7. If the chain ends with no match, return `null`.
+
+```text
+get("Bob")
+
+  hash("Bob")  ->  index 3
+       |
+       v
+  +-------+    +-------+    +-------+
+  | Alice | -> |  Bob  | -> | Carol | -> null
+  +-------+    +-------+    +-------+
+                   ^
+                   |
+             equals("Bob")? yes
+                   |
+                   v
+               return value
+```
+
+#### 6. Java 8+ Optimization — Treeification
+
+When a bucket accumulates many entries, the chain becomes a **linked list**, and lookup inside that bucket becomes **O(n)**. If an attacker deliberately generates many keys with the same hash, this can slow the map to a crawl (a denial-of-service attack).
+
+To fix this, Java 8 introduced **treeification**:
+
+- If a single bucket's chain grows past **8 nodes**,
+- **and** the total map capacity is at least **64 buckets**,
+- the bucket is converted from a **linked list** into a **self-balancing Red-Black Tree**.
+- Lookup inside that bucket becomes **O(log n)** instead of **O(n)**.
+- If the bucket later shrinks below **6 nodes**, it is converted back to a linked list.
+
+```text
+Before treeification (linked list, O(n)):
+
+  +-------+    +-------+    +-------+    +-------+
+  | A     | -> | B     | -> | C     | -> | D     | -> ...
+  +-------+    +-------+    +-------+    +-------+
+
+After treeification (red-black tree, O(log n)):
+
+              (C)
+             /   \
+          (A)     (E)
+            \    /   \
+           (B) (D)   (F)
+```
+
+#### 7. The Full Picture
+
+```text
+HashMap Internal Structure:
+
+Index Buckets Array
+ +---+
+0|   |---> Empty
+ +---+
+1|   |---> Node [KeyA] -> Node [KeyB]        (linked list, collision chain)
+ +---+
+2|   |---> Node [KeyX] -> Node [KeyY]        (linked list, collision chain)
+ +---+
+3|   |---> Red-Black Tree node                (treeified, chain size > 8)
+ +---+
+4|   |---> Empty
+ +---+
+5|   |---> Node [KeyZ]
+ +---+
+...
+ +---+
+15|  |---> Empty
+ +---+
+```
+
+
+
+#### 8. Summary
+
+```text
+1. HashMap stores data in an array of buckets.
+
+2. put(key, value):
+      - compute hash of key
+      - map hash to a bucket index
+      - if bucket is empty, insert new node
+      - if bucket is occupied (collision), chain or overwrite
+
+3. Collisions are handled with separate chaining (linked list).
+
+4. Java 8+ treeifies a bucket when its chain grows past 8 nodes
+   and the map has at least 64 buckets, giving O(log n) lookup.
+
+5. Resizing happens when the map becomes 75% full:
+   capacity doubles and all entries are rehashed.
+```
+
+
+---
+
+
+### 9. What is the contract between `hashCode()` and `equals()`?
+
+The contract between the two methods is:
+
+- **Rule 1** — If two objects are equal according to `equals()`, then `hashCode()` on each **must return the same integer**.
+
+```text
+a.equals(b) == true   ->   a.hashCode() == b.hashCode()   (MUST hold)
+```
+
+- **Rule 2** — If two objects have the same `hashCode()`, they are **not necessarily equal**. That is just a collision, and `equals()` must still be checked.
+
+```text
+a.hashCode() == b.hashCode()   ->   a.equals(b) may be true or false
+```
+
+- **Rule 3** — If you override `equals()`, you **must** override `hashCode()` as well, so that equal objects produce equal hash codes.
+
+
+#### What Happens If We Don't Override `hashCode()`?
+
+**Setup**
+
+```java
+UserToken k1 = new UserToken(101);
+UserToken k2 = new UserToken(101);
+```
+
+- `k1` and `k2` are **two separate objects in memory**.
+- Both have `id = 101`.
+- `equals()` is overridden to compare `id`, so it says they are **logically equal**.
+- `hashCode()` is **NOT** overridden, so both objects inherit the default `hashCode()` from `Object`, which is based on their memory address.
+
+```text
+k1.equals(k2)   ->  true      (same content)
+k1.hashCode()   ->  9871      (different!)
+k2.hashCode()   ->  4482
+```
+
+Even though `equals()` says they are equal, they are **not the same object**. They are two distinct objects that merely hold the same value.
+
+
+**Only `k1` is stored in the map**
+
+When we call `map.put(k1, "Authorized User")`, only `k1` is stored:
+
+```text
+put(k1, "Authorized User"):
+
+  k1.hashCode() = 9871  ->  bucket 3
+
+  Bucket 3: [k1 -> "Authorized User"]
+
+  k2 is NOT in the map.
+  k2 is just a separate object in the program.
+```
+
+So the map contains exactly one entry: `k1 -> "Authorized User"` in bucket 3.
+
+
+**Now we call `get(k2)`**.
+
+`k2` is a different object from `k1`, but it holds the same value (`id = 101`). Logically, it represents the same key, so we expect the map to return `"Authorized User"`.
+
+
+```text
+get(k2):
+
+  k2.hashCode() = 4482  ->  bucket 7
+
+  Bucket 0: (empty)
+  Bucket 1: (empty)
+  Bucket 2: (empty)
+  Bucket 3: [k1 -> "Authorized User"]   <-- k2 never looks here
+  Bucket 4: (empty)
+  ...
+  Bucket 7: (empty)                     <-- lookup lands here
+
+  Result: null   (WRONG)
+```
+
+`k2` is a different object, so its hash code sends the lookup to bucket 7. Bucket 7 is empty, so the map returns `null`. The lookup never reaches bucket 3 where `k1` is sitting.
+
+So even though `k2.equals(k1)` is `true`, the map cannot find `k1` because `k2` and `k1` are sent to different buckets.
+
+
+**Why**
+
+```text
+HashMap uses hashCode() FIRST to pick a bucket.
+If k1 and k2 have different hash codes,
+they land in different buckets,
+and the lookup for k2 never finds k1.
+```
+
+The problem is not that `k1` and `k2` are compared and rejected — the problem is that they are never compared at all, because they never end up in the same bucket.
+
+
+**Fix — override `hashCode()` too**
+
+```java
+@Override
+public int hashCode() {
+    return Objects.hash(id);
+}
+```
+
+Now:
+
+```text
+k1.hashCode() = 9871
+k2.hashCode() = 9871      (same)
+
+
+put(k1)  ->  bucket 3
+get(k2)  ->  bucket 3
+
+  Bucket 3: [k1 -> "Authorized User"]
+                 |
+                 v
+           k1.equals(k2)? yes
+                 |
+                 v
+        return "Authorized User"   (CORRECT)
+```
+
+
+**Rule**
+
+```text
+equals()       ->  tells whether two objects are logically equal
+hashCode()     ->  tells which bucket an object goes into
+
+Two objects can be equal by equals() but still be different objects.
+If their hashCode() differs, they land in different buckets,
+and the map never compares them at all.
+
+If you override equals(), you MUST override hashCode().
+```
+
+**Incorrect Version**  — only override  `equals()`
+
+```java
+import java.util.HashMap;
+
+class UserToken {
+    private int id;
+
+    UserToken(int id) { this.id = id; }
+
+    // equals() is overridden to compare content (id)
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        UserToken other = (UserToken) obj;
+        return this.id == other.id;
+    }
+
+    // hashCode() is NOT overridden  ->  default from Object (memory address)
+}
+
+public class HashContractDemo {
+    public static void main(String[] args) {
+
+        HashMap<UserToken, String> map = new HashMap<>();
+
+        // Step 1: store the value using k1
+        UserToken k1 = new UserToken(101);
+        map.put(k1, "Authorized User");
+
+        // Step 2: later, we no longer have k1.
+        //         we create a new object k2 with the same id to look up the value.
+        UserToken k2 = new UserToken(101);
+
+        System.out.println("k1.equals(k2): " + k1.equals(k2));   // true
+        System.out.println("k1.hashCode(): " + k1.hashCode());   // e.g., 9871
+        System.out.println("k2.hashCode(): " + k2.hashCode());   // e.g., 4482
+
+        // Step 3: try to fetch the value using k2
+        String result = map.get(k2);
+
+        System.out.println("Result: " + result);                 // null  (WRONG)
+    }
+}
+```
+
+
+
+**Correct Version — override both `equals()` and `hashCode()`**
+
+```java
+import java.util.HashMap;
+import java.util.Objects;
+
+class UserToken {
+    private int id;
+
+    UserToken(int id) { this.id = id; }
+
+    // equals() compares content (id)
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) return true;
+        if (obj == null || getClass() != obj.getClass()) return false;
+        UserToken other = (UserToken) obj;
+        return this.id == other.id;
+    }
+
+    // hashCode() is now overridden to match equals()
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
+    }
+}
+
+public class HashContractDemo {
+    public static void main(String[] args) {
+
+        HashMap<UserToken, String> map = new HashMap<>();
+
+        // Step 1: store the value using k1
+        UserToken k1 = new UserToken(101);
+        map.put(k1, "Authorized User");
+
+        // Step 2: later, we create a new object k2 with the same id
+        UserToken k2 = new UserToken(101);
+
+        // k1.equals(k2) is true
+        System.out.println("k1.equals(k2): " + k1.equals(k2));   // true
+
+        // k1.hashCode() == k2.hashCode()
+        System.out.println("k1.hashCode(): " + k1.hashCode());   // 132
+        System.out.println("k2.hashCode(): " + k2.hashCode());   // 132
+
+        // Step 3: fetch the value using k2
+        String result = map.get(k2);
+
+        System.out.println("Result: " + result);                 // Authorized User
+    }
+}
+```
+
+**What happens inside the map**
+
+```text
+put(k1, "Authorized User"):
+    k1.hashCode() = 132  ->  bucket 3
+    Bucket 3: [k1 -> "Authorized User"]
+
+get(k2):
+    k2.hashCode() = 132  ->  bucket 3   (same bucket)
+
+    Bucket 3: [k1 -> "Authorized User"]
+                   |
+                   v
+             k1.equals(k2)?  yes
+                   |
+                   v
+          return "Authorized User"   (CORRECT)
+```
+
+Because `hashCode()` is overridden to match `equals()`, both `k1` and `k2` land in the **same bucket**, and the lookup succeeds.
+
+
+---
+
+
+### 10. What is the difference between Fail-Fast and Fail-Safe Iterators?
+
+When iterating over a collection, changes made to the structure by other thread contexts are handled via two tracking models:
+
+* **Fail-Fast Iterators**: Operate directly on the raw live collection data structure itself. They maintain an internal tracking flag called **`modCount`** (modification counter). If the structure is modified (adding, deleting) while iterating without using the iterator's own structural methods, a **`ConcurrentModificationException`** is thrown instantly.
+  * *Examples*: Iterators for `ArrayList`, `HashSet`, `HashMap`.
+* **Fail-Safe / Fail-Weak Iterators**: Operate on a **detached clone copy** of the collection or use concurrent memory slot architectures. They can safely handle modifications mid-loop without throwing any exception, though they might not reflect changes made after the copy step.
+  * *Examples*: Iterators for `CopyOnWriteArrayList`, `ConcurrentHashMap`.
+
+#### Fail-Fast Code Example
+
+```java
+import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.List;
+
+public class FailFastDemo {
+    public static void main(String[] args) {
+        List<String> list = new ArrayList<>();
+        list.add("A");
+        list.add("B");
+
+        Iterator<String> it = list.iterator();
+        while (it.hasNext()) {
+            String val = it.next();
+
+            // CRITICAL TRAP: Mutating the raw list directly mid-iteration
+            if (val.equals("A")) {
+                list.remove(val);   // throws ConcurrentModificationException
+            }
+        }
+    }
+}
+```
+
+**Output**
+
+```text
+Exception in thread "main" java.util.ConcurrentModificationException
+    at java.base/java.util.ArrayList$Itr.checkForComodification(ArrayList.java:...)
+    at java.base/java.util.ArrayList$Itr.next(ArrayList.java:...)
+    at FailFastDemo.main(FailFastDemo.java:...)
+```
+
+**What happens inside**
+
+```text
+modCount = 0
+
+it.next()  ->  checkForComodification()
+                expectedModCount == modCount ?  yes  ->  continue
+
+list.remove("A")  ->  modCount++   (modCount = 1)
+
+it.next()  ->  checkForComodification()
+                expectedModCount (0) != modCount (1)  ->  throw
+                ConcurrentModificationException
+```
+
+
+#### Fail-Safe Code Example
+
+```java
+import java.util.Iterator;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+
+public class FailSafeDemo {
+    public static void main(String[] args) {
+        List<String> list = new CopyOnWriteArrayList<>();
+        list.add("A");
+        list.add("B");
+
+        Iterator<String> it = list.iterator();
+        while (it.hasNext()) {
+            String val = it.next();
+
+            // Mutating the list mid-iteration is SAFE here
+            if (val.equals("A")) {
+                list.remove(val);   // no exception
+            }
+        }
+
+        System.out.println("Final list: " + list);
+    }
+}
+```
+
+**Output**
+
+```text
+Final list: [B]
+```
+
+**What happens inside**
+
+```text
+Iterator is created  ->  takes a snapshot of the array  [A, B]
+                         (the snapshot is never modified)
+
+list.remove("A")     ->  creates a NEW array  [B]
+                         and swaps it in
+                         (the snapshot is untouched)
+
+Iterator keeps iterating over the snapshot [A, B]
+                         (no exception, even though the list changed)
+
+Final list:  [B]
+```
+
+#### Side-by-Side Comparison
+
+```text
++---------------------+---------------------------+-----------------------------+
+| Feature             | Fail-Fast                 | Fail-Safe                   |
++---------------------+---------------------------+-----------------------------+
+| Operates on         | Live collection           | Snapshot / clone            |
+| Detects modification| Yes, via modCount         | No                          |
+| Throws exception    | ConcurrentModificationEx. | Never                       |
+| Sees updates        | Yes, but throws           | No (works on stale copy)    |
+| Examples            | ArrayList, HashSet,       | CopyOnWriteArrayList,       |
+|                     | HashMap                   | ConcurrentHashMap           |
++---------------------+---------------------------+-----------------------------+
+```
+
+
+---
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
