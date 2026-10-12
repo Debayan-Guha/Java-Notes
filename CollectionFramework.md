@@ -1733,8 +1733,55 @@ Because `hashCode()` is overridden to match `equals()`, both `k1` and `k2` land 
 
 ---
 
+### 10. Can you use any class or Object as a Map key?
 
-### 10. What is the difference between Fail-Fast and Fail-Safe Iterators?
+Yes — technically you **can** use any object as a key in a `HashMap`. But in practice, it only works correctly if the class follows a few rules.
+
+#### The Rules
+
+For a class to be a **correct** `HashMap` key, it must:
+
+```text
+1. Override equals()
+2. Override hashCode()
+3. Be immutable (or at least not change its state after being used as a key)
+```
+
+#### Rule 1 — Override `equals()`
+
+`HashMap` uses `equals()` to check whether two keys are the same. If you do not override it, the default `Object.equals()` compares memory addresses, meaning two logically equal objects would be treated as different keys.
+
+#### Rule 2 — Override `hashCode()`
+
+`HashMap` uses `hashCode()` to decide which bucket the key goes into. If you override `equals()` but not `hashCode()`, equal keys can land in different buckets, and lookups will fail.
+
+```text
+Override equals()  ->  keys must compare correctly
+Override hashCode() ->  equal keys must land in the same bucket
+
+Both are required together.
+```
+
+#### Rule 3 — Be Immutable
+
+The key's `hashCode()` must **not change** after the key is placed in the map. If the key's state changes, its hash code changes, and the map can no longer find it in the bucket where it was originally stored.
+
+```text
+put(key, value)     ->  map computes hash(key) and stores in bucket 3
+key changes state   ->  hash(key) now points to bucket 7
+get(key)            ->  looks in bucket 7, finds nothing  ->  null
+```
+
+This is why immutable classes like `String`, `Integer`, `Long`, `UUID` make excellent keys — their hash code never changes.
+
+
+
+
+
+
+---
+
+### 11. What is the difference between Fail-Fast and Fail-Safe Iterators?
 
 When iterating over a collection, changes made to the structure by other thread contexts are handled via two tracking models:
 
@@ -1863,7 +1910,7 @@ Final list:  [B]
 ---
 
 
-### 11. Difference between Synchronized Collection and Concurrent Collection.
+### 12. Difference between Synchronized Collection and Concurrent Collection.
 
 In Java, both **Synchronized Collections** and **Concurrent Collections** provide thread-safe operations, meaning multiple threads can access or modify them without causing data corruption. However, they achieve thread safety and performance through fundamentally different mechanisms.
 
@@ -2137,20 +2184,110 @@ Concurrent Collection (e.g., ConcurrentHashMap):
 ```
 
 
+---
 
 
+### 13. How to make a Java ArrayList read-only?
+
+You can make an `ArrayList` read-only using:
+
+```java
+Collections.unmodifiableList(list);
+```
+
+This returns a **view** of the original list that does not allow any modification. Any attempt to add, remove, or set an element throws `UnsupportedOperationException`.
 
 
+#### Code Example
+
+```java
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+
+public class ReadOnlyListDemo {
+    public static void main(String[] args) {
+        List<String> list = new ArrayList<>();
+        list.add("A");
+        list.add("B");
+        list.add("C");
+
+        // Wrap the list in an unmodifiable view
+        List<String> readOnly = Collections.unmodifiableList(list);
+
+        // Reading is allowed
+        System.out.println(readOnly.get(0));       // A
+        System.out.println(readOnly);              // [A, B, C]
+
+        // Modifying throws UnsupportedOperationException
+        readOnly.add("D");                         // throws
+    }
+}
+```
+
+**Output**
+
+```text
+A
+[A, B, C]
+Exception in thread "main" java.lang.UnsupportedOperationException
+    at java.base/java.util.Collections$UnmodifiableCollection.add(Collections.java:...)
+    at ReadOnlyListDemo.main(ReadOnlyListDemo.java:...)
+```
 
 
+#### Important — It Is a View, Not a Copy
+
+`Collections.unmodifiableList(list)` does not create a new list. It returns a **wrapper** around the original list.
+
+```text
+list                 ->  [A, B, C]        (original, still modifiable)
+readOnly (wrapper)   ->  same [A, B, C]   (no modifications allowed through wrapper)
+```
+
+This means:
+
+```java
+list.add("D");                    // original list still modifiable
+System.out.println(readOnly);     // [A, B, C, D]  -> changes to the original list are visible in the unmodifiableList
+```
+
+If you want a truly independent read-only snapshot, copy the list first:
+
+```java
+List<String> readOnly = Collections.unmodifiableList(new ArrayList<>(list));
+```
+
+Now changes to `list` do not affect `readOnly`.
 
 
+---
 
 
+### 14. Difference between Array and Collection?
+
+| Feature | Array | Collection |
+| :--- | :--- | :--- |
+| **Size** | Fixed at creation | Dynamic — grows and shrinks automatically |
+| **Type of elements** | Can hold primitives and objects | Holds only objects (primitives are autoboxed) |
+| **Type safety** | Homogeneous — all elements must be the same type | Can be homogeneous (generics) or heterogeneous (raw types) |
+| **Performance** | Faster — no boxing, no overhead | Slightly slower — boxing and internal data structures |
+| **Built-in methods** | Only length field; no methods for add, remove, search | Rich API — add, remove, contains, size, iterator, etc. |
+| **Memory** | Contiguous block of memory | Depends on implementation (array, linked list, tree, etc.) |
+| **Iteration** | for loop, for-each | for-each, Iterator, ListIterator, Streams |
+| **Part of framework** | Language-level construct | Part of Java Collection Framework (java.util) |
+| **Thread safety** | No built-in thread safety | Some collections are thread-safe (ConcurrentHashMap, etc.) |
+| **Generics** | Does not use generics | Fully generic since Java 5 |
 
 
+---
 
+### 15. Difference between Comparable and Comparator?
 
+Both `Comparable` and `Comparator` are interfaces used to sort objects in Java. The key difference is:
+
+- `Comparable` defines the **natural ordering** of a class. The class itself decides how its objects should be sorted.
+- `Comparator` defines an **external, custom ordering**. A separate class or lambda decides how the objects should be sorted.
 
 
 
