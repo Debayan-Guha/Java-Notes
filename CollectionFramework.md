@@ -1863,10 +1863,278 @@ Final list:  [B]
 ---
 
 
+### 11. Difference between Synchronized Collection and Concurrent Collection.
+
+In Java, both **Synchronized Collections** and **Concurrent Collections** provide thread-safe operations, meaning multiple threads can access or modify them without causing data corruption. However, they achieve thread safety and performance through fundamentally different mechanisms.
+
+
+
+#### 1. Synchronized Collections
+
+Synchronized collections are traditional thread-safe data structures wrapped using wrapper methods like `Collections.synchronizedList()` or `Collections.synchronizedMap()`.
+
+##### How They Work
+- **Mechanism:** They typically use a single, intrinsic lock (monitor lock) on the collection object itself for **every** operation (read, write, update).
+- **Blocking:** When one thread is reading or writing to the collection, *all other threads* attempting any operation (even just reading) are blocked until the lock is released.
+
+##### Key Characteristics
+- **Performance:** Low concurrency and high contention. Because a single lock is shared across the entire collection, performance degrades significantly as the number of threads increases.
+- **Fail-Fast Iterators:** Their iterators are **fail-fast**. If the collection is structurally modified (add/remove) by any thread while another thread is iterating over it, a `ConcurrentModificationException` is thrown.
+
+
+##### Synchronized Collection — Code Example
+
+```java
+import java.util.Collections;
+import java.util.List;
+import java.util.ArrayList;
+
+public class SynchronizedCollectionDemo {
+    public static void main(String[] args) throws InterruptedException {
+
+        // 1. Create a synchronized wrapper around a regular ArrayList
+        List<String> list = Collections.synchronizedList(new ArrayList<>());
+
+        list.add("A");
+        list.add("B");
+        list.add("C");
+
+        // 2. Thread 1 — iterates over the list
+        Thread reader = new Thread(() -> {
+            synchronized (list) {              // manual lock for iteration
+                for (String s : list) {
+                    System.out.println("Reader: " + s);
+                    try { Thread.sleep(100); } catch (InterruptedException e) {}
+                }
+            }
+        });
+
+        // 3. Thread 2 — modifies the list while Thread 1 is iterating
+        Thread writer = new Thread(() -> {
+            try { Thread.sleep(150); } catch (InterruptedException e) {}
+            list.add("D");                      // synchronized method — allowed
+            System.out.println("Writer added D");
+        });
+
+        reader.start();
+        writer.start();
+
+        reader.join();
+        writer.join();
+
+        System.out.println("Final list: " + list);
+    }
+}
+```
+
+**Output (with `synchronized (list)` around the loop)**
+
+```text
+Reader: A
+Reader: B
+Reader: C
+Writer added D
+Final list: [A, B, C, D]
+```
+
+The writer waits until the reader finishes iterating, because the reader holds the lock on `list` for the entire loop. No exception is thrown.
+
+
+**Why iteration needs manual synchronization**
+
+The wrapper synchronizes each individual method call (`add`, `get`, `remove`), but a loop calls `hasNext()` and `next()` as separate calls. Another thread can modify the list between those calls, causing a `ConcurrentModificationException`. So you must wrap the whole loop inside `synchronized (list) { ... }`.
+
+```java
+import java.util.Collections;
+import java.util.List;
+import java.util.ArrayList;
+
+public class ManualSyncDemo {
+    public static void main(String[] args) throws InterruptedException {
+
+        List<String> list = Collections.synchronizedList(new ArrayList<>());
+        list.add("A");
+        list.add("B");
+        list.add("C");
+
+        // Reader thread — iterates WITHOUT manual synchronization
+        Thread reader = new Thread(() -> {
+            try {
+                for (String s : list) {          // no synchronized (list)
+                    System.out.println("Reader: " + s);
+                    Thread.sleep(100);
+                }
+            } catch (Exception e) {
+                System.out.println("Reader threw: " + e.getClass().getSimpleName());
+            }
+        });
+
+        // Writer thread — modifies the list mid-iteration
+        Thread writer = new Thread(() -> {
+            try { Thread.sleep(150); } catch (InterruptedException e) {}
+            list.add("D");                        // allowed — method is synchronized
+            System.out.println("Writer added D");
+        });
+
+        reader.start();
+        writer.start();
+        reader.join();
+        writer.join();
+
+        System.out.println("Final list: " + list);
+    }
+}
+```
+
+**Output (typical)**
+
+```text
+Reader: A
+Reader: B
+Writer added D
+Reader threw: ConcurrentModificationException
+Final list: [A, B, C, D]
+```
+
+The wrapper locked each `hasNext()` and `next()` call individually, but not the whole loop. The writer slipped in between calls and changed the list, causing the exception.
+
+
+#### 2. Concurrent Collections
+
+Concurrent collections are part of the `java.util.concurrent` package (e.g., `ConcurrentHashMap`, `CopyOnWriteArrayList`, `BlockingQueue`).
+
+##### How They Work
+- **Mechanism:** They use modern concurrency techniques such as lock striping, compare-and-swap (CAS) operations, or fine-grained locking instead of locking the entire object.
+- **Non-Blocking / Segmented Locking:** Different threads can often read and write concurrently to different parts of the collection without blocking each other (for example, `ConcurrentHashMap` locks only specific buckets/segments).
+
+##### Key Characteristics
+- **Performance:** High concurrency and scalability. They are optimized for multi-threaded environments with heavy read/write traffic.
+- **Weakly Consistent Iterators:** Their iterators are **weakly consistent**. They do **not** throw `ConcurrentModificationException`. Instead, they reflect elements as they were at the iterator's creation or safely incorporate modifications made during iteration.
+
+
+
+##### Concurrent Collection — Code Example with Threads
+
+```java
+import java.util.concurrent.ConcurrentHashMap;
+
+public class ConcurrentCollectionDemo {
+    public static void main(String[] args) throws InterruptedException {
+
+        // 1. Create a ConcurrentHashMap (thread-safe without external locks)
+        ConcurrentHashMap<String, Integer> map = new ConcurrentHashMap<>();
+
+        map.put("A", 1);
+        map.put("B", 2);
+        map.put("C", 3);
+
+        // 2. Thread 1 — iterates over the map (NO manual synchronization needed)
+        Thread reader = new Thread(() -> {
+            for (String key : map.keySet()) {
+                System.out.println("Reader: " + key + " = " + map.get(key));
+                try { Thread.sleep(100); } catch (InterruptedException e) {}
+            }
+        });
+
+        // 3. Thread 2 — modifies the map while Thread 1 is iterating
+        Thread writer = new Thread(() -> {
+            try { Thread.sleep(150); } catch (InterruptedException e) {}
+            map.put("D", 4);                     // safe — no exception
+            System.out.println("Writer added D");
+        });
+
+        reader.start();
+        writer.start();
+
+        reader.join();
+        writer.join();
+
+        System.out.println("Final map: " + map);
+    }
+}
+```
+
+**Output (typical)**
+
+```text
+Reader: A = 1
+Reader: B = 2
+Reader: C = 3
+Writer added D
+Final map: {A=1, B=2, C=3, D=4}
+```
+
+No `ConcurrentModificationException`, and no `synchronized` block needed.
+
+
+**Why no exception is thrown**
+
+```text
+ConcurrentHashMap uses a weakly consistent iterator.
+
+When the reader iterates:
+    - it does NOT snapshot the entire map
+    - it walks the buckets directly, but tolerates concurrent changes
+
+When the writer calls put("D", 4):
+    - it locks only the specific bucket for "D"
+    - other buckets remain available to readers
+
+The reader may or may not see "D" during iteration,
+but it will NEVER throw ConcurrentModificationException.
+```
+
+**What the reader actually sees**
+
+```text
+Reader: A = 1
+Reader: B = 2
+Reader: C = 3
+
+(the reader may or may not see "D" — depends on timing)
+```
+
+The final map contains `D` because the writer's change was applied to the live map.
+
+**Key takeaway**
+
+```text
+Synchronized Collection (e.g., synchronizedList):
+    - needs synchronized (list) around the loop
+    - otherwise  ->  ConcurrentModificationException
+
+Concurrent Collection (e.g., ConcurrentHashMap):
+    - no manual synchronization needed
+    - iterator is weakly consistent
+    - never throws ConcurrentModificationException
+    - may or may not see updates made during iteration
+```
 
 
 
 
+#### Key Differences
+
+```text
++------------------------+-------------------------------+-------------------------------+
+| Feature                | Synchronized Collection       | Concurrent Collection         |
++------------------------+-------------------------------+-------------------------------+
+| Locking                | Single lock on entire         | Fine-grained locks per bucket |
+|                        | collection                    | or lock-free (CAS)            |
+| Concurrency            | Only one thread at a time     | Many threads can read/write   |
+|                        |                               | simultaneously                |
+| Performance            | Slow under high contention    | High throughput               |
+| Iteration              | NOT safe — must manually      | Safe — weakly consistent      |
+|                        | synchronize the block         | iterators                     |
+| Fail-Fast              | Yes                           | No (weakly consistent)        |
+| Null support           | Depends on backing collection | ConcurrentHashMap does NOT    |
+|                        |                               | allow null keys/values        |
+| Introduced in          | Java 1.2 (Collections utility)| Java 1.5 (java.util.concurrent)|
+| Examples               | synchronizedList,             | ConcurrentHashMap,            |
+|                        | synchronizedMap,              | CopyOnWriteArrayList,         |
+|                        | synchronizedSet               | ConcurrentLinkedQueue         |
++------------------------+-------------------------------+-------------------------------+
+```
 
 
 
