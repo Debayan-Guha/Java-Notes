@@ -1485,6 +1485,28 @@ a.hashCode() == b.hashCode()   ->   a.equals(b) may be true or false
 - **Rule 3** — If you override `equals()`, you **must** override `hashCode()` as well, so that equal objects produce equal hash codes.
 
 
+#### What Happens If We Don't Override `equals()`?
+
+**Setup**
+
+```java
+UserToken k1 = new UserToken(101);
+UserToken k2 = new UserToken(101);
+```
+
+- `k1` and `k2` are **two separate objects in memory**.
+- Both have `id = 101`.
+- `equals()` is **NOT** overridden, so both objects inherit the default `equals()` from `Object`, which compares memory addresses.
+- `hashCode()` is overridden to be based on `id`, so both objects produce the same hash code.
+
+```text
+k1.equals(k2)   ->  false     (different objects in memory)
+k1.hashCode()   ->  132
+k2.hashCode()   ->  132       (same)
+```
+
+Even though the hash codes match, `equals()` says the two keys are **not equal**, because by default it checks whether both references point to the same object.
+
 #### What Happens If We Don't Override `hashCode()`?
 
 **Setup**
